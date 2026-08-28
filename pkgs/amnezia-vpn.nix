@@ -132,7 +132,28 @@ stdenv.mkDerivation (finalAttrs: {
     libxcb-cursor
   ];
 
-  appendRunpaths = [ "${placeholder "out"}/share/amnezia-vpn/lib" ];
+  # patchelf rewrites a binary's RUNPATH by shifting ELF sections around, and Go
+  # binaries do not survive that: ld.so segfaults inside dl_main before main()
+  # ever runs, so the daemon just sees "Tunnel process encountered an error:
+  # QProcess::Crashed". amneziawg-go needs nothing but libc, which the
+  # interpreter finds through its own default path, so it only gets its
+  # interpreter repointed and is kept away from autoPatchelfHook entirely.
+  dontAutoPatchelf = true;
+
+  postFixup = ''
+    autoPatchelf -- \
+      $out/share/amnezia-vpn/lib \
+      $out/share/amnezia-vpn/plugins \
+      $out/share/amnezia-vpn/qml \
+      $out/share/amnezia-vpn/bin/AmneziaVPN \
+      $out/share/amnezia-vpn/bin/AmneziaVPN-service \
+      $out/share/amnezia-vpn/bin/openvpn
+
+    patchelf --set-interpreter "$(cat "$NIX_CC/nix-support/dynamic-linker")" \
+      $out/share/amnezia-vpn/bin/amneziawg-go
+
+    # tun2socks is a statically linked Go binary and needs no patching at all.
+  '';
 
   installPhase = ''
     runHook preInstall

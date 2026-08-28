@@ -246,3 +246,29 @@ nix eval --impure --raw --expr '(import ./module-test.nix { flakePath = builtins
 * Для WireGuard/AmneziaWG нужны симлинки в `/usr/bin` (см. `linkWireguardTools`).
 * В nixpkgs есть пакет `amnezia-vpn`, собираемый из исходников — если вам не
   нужна именно свежая версия из официального инсталлятора, используйте его.
+
+---
+
+## Заметки по упаковке
+
+### Go-бинарники и patchelf
+
+`bin/amneziawg-go` — динамически слинкованный Go-бинарник. `patchelf` переписывает
+RUNPATH, сдвигая секции ELF, и Go-бинарники этого не переживают: `ld.so` падает
+в `dl_main` ещё до `main()`. Снаружи это выглядит как
+
+```
+Process (amneziawg-go) of user 0 dumped core.
+[WARNING] WireguardUtilsLinux : Tunnel process encountered an error: QProcess::Crashed
+[ERROR]   WireguardUtilsLinux : Unable to read tunnel interface name
+[ERROR]   Daemon : Interface creation failed.
+```
+
+— в GUI кнопка «Подключить» просто отщёлкивает обратно.
+
+Поэтому `dontAutoPatchelf = true`, а в `postFixup` `autoPatchelf` вызывается
+вручную по явному списку путей, без `bin/amneziawg-go`; последнему правится
+только интерпретатор (`--set-interpreter`). Больше ему ничего и не нужно — из
+зависимостей у него один `libc.so.6`, который интерпретатор находит сам.
+
+`bin/tun2socks` слинкован статически и не требует патчинга вообще.
