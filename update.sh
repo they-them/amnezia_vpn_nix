@@ -6,8 +6,18 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 pkg="$root/pkgs/amnezia-vpn.nix"
 
-latest=$(curl -sSf https://api.github.com/repos/amnezia-vpn/amnezia-client/releases \
-  | jq -r 'map(select(.prerelease == false)) | .[0].tag_name')
+auth=()
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+fi
+
+latest=$(curl -sSf "${auth[@]}" https://api.github.com/repos/amnezia-vpn/amnezia-client/releases \
+  | jq -r 'map(select(.prerelease == false and .draft == false)) | .[0].tag_name')
+
+if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+  echo "error: could not determine the latest release" >&2
+  exit 1
+fi
 
 current=$(sed -n 's/^  version = "\(.*\)";$/\1/p' "$pkg")
 
@@ -22,5 +32,6 @@ hash=$(nix hash convert --hash-algo sha256 --to sri "$(nix-prefetch-url "$url")"
 
 sed -i "s|^  version = \".*\";$|  version = \"$latest\";|" "$pkg"
 sed -i "s|^    hash = \".*\";$|    hash = \"$hash\";|" "$pkg"
+sed -i "s|\*\*AmneziaVPN $current\*\*|**AmneziaVPN $latest**|" "$root/README.md"
 
 echo "done: version=$latest hash=$hash"

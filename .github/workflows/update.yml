@@ -1,0 +1,91 @@
+name: update
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Check for a new upstream release
+        id: update
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash ./update.sh
+          version=$(sed -n 's/^  version = "\(.*\)";$/\1/p' pkgs/amnezia-vpn.nix)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Free up disk space
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+
+      - name: nix flake check
+        if: steps.update.outputs.changed == 'true'
+        run: nix flake check --print-build-logs
+
+      - name: nix build
+        if: steps.update.outputs.changed == 'true'
+        run: nix build .#amnezia-vpn --print-build-logs
+
+      - name: Verify the payload binaries actually run
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          ./result/share/amnezia-vpn/bin/amneziawg-go --version
+          ./result/share/amnezia-vpn/bin/openvpn --version | head -1
+          ./result/share/amnezia-vpn/bin/tun2socks --version | head -1
+
+      - name: Verify nothing is left unlinked
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          missing=$(ldd ./result/share/amnezia-vpn/bin/AmneziaVPN | grep 'not found' || true)
+          if [ -n "$missing" ]; then
+            echo "unresolved libraries:"; echo "$missing"; exit 1
+          fi
+          echo "all libraries resolved"
+
+      - name: Commit and push
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pkgs/amnezia-vpn.nix README.md
+          git commit -m "Update to ${{ steps.update.outputs.version }}"
+          git push
+
+      - name: Notify Telegram on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VERSION: ${{ steps.update.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          text="❌ ${GITHUB_REPOSITORY}: auto-update failed${VERSION:+ (amnezia-vpn $VERSION)}
+          ${RUN_URL}"
+          curl -sSf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${text}" \
+            -o /dev/null
