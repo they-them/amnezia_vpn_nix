@@ -36,7 +36,7 @@ $out/lib/systemd/system/AmneziaVPN.service
 ### Быстрый запуск без установки
 
 ```bash
-nix run github:terrentii/amnezia_vpn_nix#amnezia-vpn
+nix run github:they-them/amnezia_vpn_nix#amnezia-vpn
 ```
 
 ### Как flake input
