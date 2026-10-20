@@ -60,7 +60,12 @@ jobs:
       - name: Verify nothing is left unlinked
         if: steps.update.outputs.changed == 'true'
         run: |
-          missing=$(ldd ./result/share/amnezia-vpn/bin/AmneziaVPN | grep 'not found' || true)
+          # The runner's own ldd uses Ubuntu's glibc, which is older than the
+          # Nix one and misreports version requirements, so ask the binary's
+          # own Nix interpreter instead.
+          bin=./result/share/amnezia-vpn/bin/AmneziaVPN
+          interp=$(readelf -l "$bin" | sed -n 's/.*interpreter: \(.*\)\]/\1/p')
+          missing=$("$interp" --list "$bin" | grep 'not found' || true)
           if [ -n "$missing" ]; then
             echo "unresolved libraries:"; echo "$missing"; exit 1
           fi
