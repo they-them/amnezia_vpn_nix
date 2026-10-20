@@ -49,7 +49,7 @@ nix run github:terrentii/amnezia_vpn_nix#amnezia-vpn
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     amnezia-vpn = {
-      url = "github:terrentii/amnezia_vpn_nix";
+      url = "github:they-them/amnezia_vpn_nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
