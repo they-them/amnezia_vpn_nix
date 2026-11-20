@@ -1,6 +1,6 @@
 # amnezia-vpn для NixOS
 
-Nix flake, собирающий **AmneziaVPN 5.1.0.6** для NixOS из официального
+Nix flake, собирающий **AmneziaVPN 5.1.1.10** для NixOS из официального
 `.run`-инсталлятора (формат Qt Installer Framework).
 
 Инсталлятор *не запускается* — derivation вырезает из него встроенные 7z-архивы
